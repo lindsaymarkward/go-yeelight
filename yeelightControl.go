@@ -14,15 +14,13 @@ type Light struct {
 	ID string
 	Type, Online, LQI, R, G, B, Level, Effect int
 	/*
-	       this.id = id; // HEX
-	       this.type = type; // 0 or 1
-	       this.online = online; // 0 or 1
-	       this.lqi = lqi; // LED ZigBee signal, 0-100  *I think
-	       this.r = r; // 0-255...
-	       this.g = g;
-	       this.b = b;
-	       this.level = level; // 0-100 brightness
-	       this.effect = effect; // note: reserved/not implemented by Yeelight yet
+	       id = HEX code for light ID
+	       type =  0 or 1 (always 1)
+	       online = 0 or 1 (1 is online)
+	       lqi = LED ZigBee signal, 0-100  *I think
+	       r, g, b = 0-255...
+	       level = 0-100 brightness
+	       effect = reserved/not implemented by Yeelight yet
 	*/
 }
 
