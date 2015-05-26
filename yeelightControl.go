@@ -41,7 +41,7 @@ func GetLights() ([]Light, error) {
 // SendCommand sends a single named command to the Yeelight hub
 func SendCommand(cmd string, ip string) (string, error) {
 
-	//	log("Sending command %s to TV %s", cmd, tv.Host)
+	//	log("Sending command %s to IP %s", cmd, ip)
 
 	conn, err := net.Dial("tcp", ip+":10003")
 	if err != nil {
@@ -95,4 +95,29 @@ func getLightsFromString(response string) []Light {
 		}
 	}
 	return lights
+}
+
+// DiscoverHub uses SSDP (UDP) to find and return the IP address of the Yeelight hub
+// returns an empty string if not found
+// ref: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
+func DiscoverHub() (string, error) {
+	searchString := "M-SEARCH * HTTP/1.1\r\n HOST:239.255.255.250:1900\r\n MAN:\"ssdp:discover\"\r\n ST:yeelink:yeebox\r\n MAC:00000001\r\n MX:3\r\n\n\r\n"
+	ip := ""
+	ssdp, _ := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
+	c, _ := net.ListenPacket("udp4", ":0")
+	socket := c.(*net.UDPConn)
+
+	message := []byte(searchString)
+	socket.WriteToUDP(message, ssdp)
+	answerBytes := make([]byte, 1024)
+	// stores result in answerBytes (pass-by-reference)
+	_, _, err := socket.ReadFromUDP(answerBytes)
+	if err == nil {
+		response := string(answerBytes)
+		// extract IP address from full response
+		startIndex := strings.Index(response, "LOCATION: ") + 10
+		endIndex := strings.Index(response, "MAC: ") - 2
+		ip = response[startIndex:endIndex]
+	}
+	return ip, err
 }
