@@ -8,7 +8,13 @@ import (
 	"strings"
 )
 
+// TODO: replace with Hub struct's ID
 var IP = "192.168.1.59"
+
+type Hub struct {
+	IP       string
+	LightIDs []string // array of just the IDs of all lights the hub controls -- MAYBE? Maybe best in device, not here...
+}
 
 type Light struct {
 	ID                                        string
@@ -69,19 +75,53 @@ func SetLight(id string, r, g, b, brightness int) error {
 	return err
 }
 
+// SetOnOff sets the light to on (full brightness) when state is true, off when it is false
+func SetOnOff(id string, state bool) error {
+	var cmd string
+	if state {
+		cmd = fmt.Sprintf("C %s,,,,100,\r\n", id)
+	} else {
+		cmd = fmt.Sprintf("C %s,,,,0,\r\n", id)
+	}
+	fmt.Printf("%#v", cmd)
+	_, err := SendCommand(cmd, IP)
+	return err
+}
+
+// ToggleOnOff
+func ToggleOnOff(id string) error {
+	// TODO: get lights, determine on/off state of chosen light then SetOnOff accordingly
+	return nil
+}
+
+// SetBrightness takes a float level (0-1) and sets the brightness of a light (0-100)
+func SetBrightness(id string, level float64) error {
+	// convert level fraction to int 0-100
+	brightness := int(level * 100)
+	cmd := fmt.Sprintf("C %s,,,,%d,\r\n", id, brightness)
+	_, err := SendCommand(cmd, IP)
+	return err
+}
+
+// SetColor takes r, g, b values (0-255) and sets the colour, leaving brightness unchanged
+func SetColor(id string, r, g, b uint8) error {
+	cmd := fmt.Sprintf("C %s,%d,%d,%d,,\r\n", id, r, g, b)
+	_, err := SendCommand(cmd, IP)
+	return err
+}
+
 // getLightsFromString converts string response from Yeelight GL command
 // into an array of Light structs with all the data for each light
 func getLightsFromString(response string) []Light {
 	var lights []Light
 	lights = make([]Light, 0)
 	if response == "" {
-		fmt.Println(fmt.Errorf("Error")) // TODO: find out how to use errors
+		fmt.Println(fmt.Errorf("Error, string is empty"))
 	} else {
 		response = strings.TrimLeft(response, "GLB ")
-		// remove last ';' so we don't get an empty light
-		response = strings.TrimRight(response, ";")
+		// remove last ';\r\n' so we don't get an empty light
+		response = strings.TrimRight(response, ";\r\n")
 		lightStrings := strings.Split(response, ";")
-		//		fmt.Println(lightStrings)
 		for _, lightString := range lightStrings {
 			parts := strings.Split(lightString, ",")
 			address := parts[0]
@@ -101,12 +141,12 @@ func getLightsFromString(response string) []Light {
 // returns an empty string if not found
 // ref: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
 func DiscoverHub() (string, error) {
+	// TODO: Add timeout, err
 	searchString := "M-SEARCH * HTTP/1.1\r\n HOST:239.255.255.250:1900\r\n MAN:\"ssdp:discover\"\r\n ST:yeelink:yeebox\r\n MAC:00000001\r\n MX:3\r\n\n\r\n"
 	ip := ""
 	ssdp, _ := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
 	c, _ := net.ListenPacket("udp4", ":0")
 	socket := c.(*net.UDPConn)
-
 	message := []byte(searchString)
 	socket.WriteToUDP(message, ssdp)
 	answerBytes := make([]byte, 1024)

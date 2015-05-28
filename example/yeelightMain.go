@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/lindsaymarkward/go-yeelight"
 	"fmt"
+
+	"github.com/lindsaymarkward/go-yeelight"
 )
 
 // main shows examples of how to use the library
@@ -14,29 +15,32 @@ func main() {
 		fmt.Printf("Error: %s", err)
 	}
 
-	/*
-		// get and display the current lights and their values
-		lights, _ := yeelight.GetLights()
-		fmt.Println(lights)
+	// get and display the current lights and their values
+	lights, _ := yeelight.GetLights()
+	fmt.Println(lights)
 
-		// send a raw command, print the response ("CB")
-		response, _ := yeelight.SendCommand("C 50F5,0,200,255,80,0\r\n", yeelight.IP)
-		fmt.Println(response)
+	//	yeelight.SetOnOff("3CB8", true)
 
-		// set a particular light to medium bright magenta
-		yeelight.SetLight(lights[3].ID, 255, 0, 255, 50)
+	//	yeelight.SetBrightness("50F5", 0.5)
 
-		// loop and fade one light up and another down
-		//	for i := 0; i < 100; i++ {
-		//		yeelight.SetLight("3CB8", 250, 0, 250, 100-i)
-		//		yeelight.SetLight("50F5", 250, 250, 0, i)
-		//		fmt.Print(time.Second)
-		//		time.Sleep(50 * time.Millisecond)
-		//	}
+	//	// send a raw command, print the response ("CB")
+	//	response, _ := yeelight.SendCommand("C 3CB8,255,255,255,100,0\r\n", yeelight.IP)
+	//	fmt.Println(response)
+	//
+	//	// set a particular light to medium bright magenta
+	//	yeelight.SetLight(lights[3].ID, 255, 0, 255, 50)
+	//
+	//	// loop and fade one light up and another down
+	//	//	for i := 0; i < 100; i++ {
+	//	//		yeelight.SetLight("3CB8", 250, 0, 250, 100-i)
+	//	//		yeelight.SetLight("50F5", 250, 250, 0, i)
+	//	//		fmt.Print(time.Second)
+	//	//		time.Sleep(50 * time.Millisecond)
+	//	//	}
+	//
+	//	time.Sleep(3 * time.Second)
+	//
+	//	// turn off all the lights
+	//	yeelight.TurnOffAllLights()
 
-		time.Sleep(3 * time.Second)
-
-		// turn off all the lights
-		yeelight.TurnOffAllLights()
-	*/
 }
