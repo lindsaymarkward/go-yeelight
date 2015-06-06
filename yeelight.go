@@ -3,13 +3,13 @@ package yeelight
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
-)
 
-// TODO: replace with Hub struct's ID
-var IP = "192.168.1.59"
+	"errors"
+)
 
 type Hub struct {
 	IP       string
@@ -32,10 +32,10 @@ type Light struct {
 
 // GetLights queries the Yeelight hub for current status of all lights and
 // returns an array of Light structs with the values
-func GetLights() ([]Light, error) {
-	response, err := SendCommand("GL\r\n", IP)
+func GetLights(ip string) ([]Light, error) {
+	response, err := SendCommand("GL\r\n", ip)
 	if err != nil {
-		fmt.Println("Error is:", err) // TODO - change to log
+		log.Println("Error is:", err)
 		return []Light{}, err
 	} else {
 		lights := getLightsFromString(response)
@@ -44,70 +44,126 @@ func GetLights() ([]Light, error) {
 
 }
 
-// SendCommand sends a single named command to the Yeelight hub
+// SendCommand sends a single named command to the Yeelight hub via TCP
 func SendCommand(cmd string, ip string) (string, error) {
-
-	//	log("Sending command %s to IP %s", cmd, ip)
-
+	//	log.Printf("Sending command %s to IP %s\n", cmd, ip)
 	conn, err := net.Dial("tcp", ip+":10003")
+	// TODO: Figure out timeout - not working like this...
+	//	raddr, err := net.ResolveTCPAddr("tcp", ip+":10003")
+	//	conn, err := net.DialTCP("tcp", nil, raddr)
+	//	conn.SetDeadline(time.Now().Add(100 * time.Millisecond))
+
 	if err != nil {
-		fmt.Println("Failed to connect: %s", err)
+		log.Println("Failed to connect: %s", err)
 		return "", err
 	}
-
+	// send command to net connection, read it
 	fmt.Fprintf(conn, cmd)
-	status, err := bufio.NewReader(conn).ReadString('\n')
+	response, err := bufio.NewReader(conn).ReadString('\n')
+	//	conn.SetDeadline(time.Time{})
 	conn.Close()
-	return status, err
+	return response, err
 }
 
 // TurnOffAllLights turns off all Yeelight bulbs on hub
-func TurnOffAllLights() error {
-	_, err := SendCommand("C G000,,,0,0,0\r\n", IP)
+func TurnOffAllLights(ip string) error {
+	_, err := SendCommand("C G000,,,0,0,0\r\n", ip)
 	return err
 }
 
 // SetLight sets the useful values (R, G, B, Brightness - ints) for a given light based on its ID (string)
-func SetLight(id string, r, g, b, brightness int) error {
+func SetLight(id string, r, g, b, brightness int, ip string) error {
 	// format string like command: "C 50F5,200,100,255,90,0\r\n"
 	cmd := fmt.Sprintf("C %s,%d,%d,%d,%d,0\r\n", id, r, g, b, brightness)
-	_, err := SendCommand(cmd, IP)
+	_, err := SendCommand(cmd, ip)
 	return err
 }
 
 // SetOnOff sets the light to on (full brightness) when state is true, off when it is false
-func SetOnOff(id string, state bool) error {
+func SetOnOff(id string, state bool, ip string) error {
 	var cmd string
 	if state {
 		cmd = fmt.Sprintf("C %s,,,,100,\r\n", id)
 	} else {
 		cmd = fmt.Sprintf("C %s,,,,0,\r\n", id)
 	}
-	fmt.Printf("%#v", cmd)
-	_, err := SendCommand(cmd, IP)
+//	fmt.Printf("%#v", cmd)
+	_, err := SendCommand(cmd, ip)
 	return err
 }
 
-// ToggleOnOff
-func ToggleOnOff(id string) error {
-	// TODO: get lights, determine on/off state of chosen light then SetOnOff accordingly
-	return nil
+// ToggleOnOff determines on/off state of chosen light (0 is off, anything > 0 is on)
+// then calls SetOnOff to set opposite on/off state
+func ToggleOnOff(id string, ip string) error {
+	lights, err := GetLights(ip)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < len(lights); i++ {
+		if lights[i].ID == id {
+			if lights[i].Level != 0 {
+				err = SetOnOff(id, false, ip)
+			} else {
+				err = SetOnOff(id, true, ip)
+			}
+			break
+		}
+	}
+	return err
 }
 
 // SetBrightness takes a float level (0-1) and sets the brightness of a light (0-100)
-func SetBrightness(id string, level float64) error {
+func SetBrightness(id string, level float64, ip string) error {
 	// convert level fraction to int 0-100
 	brightness := int(level * 100)
 	cmd := fmt.Sprintf("C %s,,,,%d,\r\n", id, brightness)
-	_, err := SendCommand(cmd, IP)
+	_, err := SendCommand(cmd, ip)
 	return err
 }
 
 // SetColor takes r, g, b values (0-255) and sets the colour, leaving brightness unchanged
-func SetColor(id string, r, g, b uint8) error {
+func SetColor(id string, r, g, b uint8, ip string) error {
 	cmd := fmt.Sprintf("C %s,%d,%d,%d,,\r\n", id, r, g, b)
-	_, err := SendCommand(cmd, IP)
+	_, err := SendCommand(cmd, ip)
 	return err
+}
+
+// Heartbeat pings the Yeelight hub to see if it's alive, returns either nil error if it's responsive
+// or error if the ack is not received from the hub.
+func Heartbeat(ip string) error {
+	response, err := SendCommand("HB\r\n", ip)
+	if err != nil {
+		return err
+	}
+	if response != "HACK\r\n" {
+		return errors.New("Error. Hub not responding")
+	}
+	return nil
+}
+
+// DiscoverHub uses SSDP (UDP) to find and return the IP address of the Yeelight hub
+// returns an empty string if not found
+// ref for UDP code: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
+func DiscoverHub() (string, error) {
+	// TODO: Add timeout and return error when not found after a while
+	searchString := "M-SEARCH * HTTP/1.1\r\n HOST:239.255.255.250:1900\r\n MAN:\"ssdp:discover\"\r\n ST:yeelink:yeebox\r\n MAC:00000001\r\n MX:3\r\n\n\r\n"
+	ip := ""
+	ssdp, _ := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
+	c, _ := net.ListenPacket("udp4", ":0")
+	socket := c.(*net.UDPConn)
+	message := []byte(searchString)
+	socket.WriteToUDP(message, ssdp)
+	answerBytes := make([]byte, 1024)
+	// stores result in answerBytes (pass-by-reference)
+	_, _, err := socket.ReadFromUDP(answerBytes)
+	if err == nil {
+		response := string(answerBytes)
+		// extract IP address from full response
+		startIndex := strings.Index(response, "LOCATION: ") + 10
+		endIndex := strings.Index(response, "MAC: ") - 2
+		ip = response[startIndex:endIndex]
+	}
+	return ip, err
 }
 
 // getLightsFromString converts string response from Yeelight GL command
@@ -135,29 +191,4 @@ func getLightsFromString(response string) []Light {
 		}
 	}
 	return lights
-}
-
-// DiscoverHub uses SSDP (UDP) to find and return the IP address of the Yeelight hub
-// returns an empty string if not found
-// ref: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
-func DiscoverHub() (string, error) {
-	// TODO: Add timeout, err
-	searchString := "M-SEARCH * HTTP/1.1\r\n HOST:239.255.255.250:1900\r\n MAN:\"ssdp:discover\"\r\n ST:yeelink:yeebox\r\n MAC:00000001\r\n MX:3\r\n\n\r\n"
-	ip := ""
-	ssdp, _ := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
-	c, _ := net.ListenPacket("udp4", ":0")
-	socket := c.(*net.UDPConn)
-	message := []byte(searchString)
-	socket.WriteToUDP(message, ssdp)
-	answerBytes := make([]byte, 1024)
-	// stores result in answerBytes (pass-by-reference)
-	_, _, err := socket.ReadFromUDP(answerBytes)
-	if err == nil {
-		response := string(answerBytes)
-		// extract IP address from full response
-		startIndex := strings.Index(response, "LOCATION: ") + 10
-		endIndex := strings.Index(response, "MAC: ") - 2
-		ip = response[startIndex:endIndex]
-	}
-	return ip, err
 }

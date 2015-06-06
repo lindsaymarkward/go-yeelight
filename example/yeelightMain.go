@@ -8,6 +8,7 @@ import (
 
 // main shows examples of how to use the library
 func main() {
+	fmt.Println("Discovering hub via SSDP (UDP)")
 	ip, err := yeelight.DiscoverHub()
 	if err == nil {
 		fmt.Printf("Hub found at %s\n", ip)
@@ -16,8 +17,18 @@ func main() {
 	}
 
 	// get and display the current lights and their values
-	lights, _ := yeelight.GetLights()
+	lights, _ := yeelight.GetLights(ip)
 	fmt.Println(lights)
+
+	err = yeelight.Heartbeat(ip)
+//	err = yeelight.Heartbeat("192.168.1.1") // broken request
+	if err != nil {
+		fmt.Println("Hub is not responding")
+	} else {
+		fmt.Println("Hub is responding")
+	}
+
+	//	err = yeelight.ToggleOnOff("50F5", ip)
 
 	//	yeelight.SetOnOff("3CB8", true)
 
