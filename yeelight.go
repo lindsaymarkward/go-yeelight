@@ -73,7 +73,7 @@ func SendCommand(cmd string, ip string) (string, error) {
 	case <- success:
 		return response, err
 	case <- time.After(timeout):
-		return "", fmt.Errorf("Timed out sending TCP command %v to Yeelight hub at %v", cmd, ip)
+		return "", fmt.Errorf("Timed out sending TCP command %v to Yeelight hub at %v\n", cmd, ip)
 	}
 	return response, err
 }
@@ -154,6 +154,21 @@ func Heartbeat(ip string) error {
 	return nil
 }
 
+func IsOn(id, ip string) (bool, error) {
+	lights, err := GetLights(ip)
+	for _, light := range lights {
+		if light.ID == id {
+			if light.Level > 0 {
+				return true, err
+			} else {
+				return false, err
+			}
+		}
+	}
+	// unknown light
+	return false, fmt.Errorf("Unknown light ID %v\n", id)
+}
+
 // DiscoverHub uses SSDP (UDP) to find and return the IP address of the Yeelight hub
 // returns an empty string if not found
 // ref for UDP code: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
@@ -185,7 +200,7 @@ func DiscoverHub() (string, error) {
 	case result := <-success:
 		return result, nil
 	case <-time.After(timeout):
-		return "", fmt.Errorf("Timed out searching for hub")
+		return "", fmt.Errorf("Timed out searching for hub\n")
 	}
 
 	return ip, err
