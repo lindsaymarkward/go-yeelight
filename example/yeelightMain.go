@@ -16,8 +16,10 @@ func main() {
 		fmt.Printf("Error: %s", err)
 	}
 
+//	ip := "192.168.1.59"
+
 	// get and display the current lights and their values
-	lights, _ := yeelight.GetLights(ip)
+	lights, err := yeelight.GetLights(ip)
 	fmt.Println(lights)
 
 	err = yeelight.Heartbeat(ip)
