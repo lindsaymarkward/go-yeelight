@@ -10,7 +10,11 @@ import (
 	"strings"
 
 	"errors"
+	"time"
 )
+
+// timeout value for TCP and UDP commands
+const timeout = time.Second * 2
 
 type Hub struct {
 	IP       string
@@ -47,22 +51,30 @@ func GetLights(ip string) ([]Light, error) {
 
 // SendCommand sends a single named command to the Yeelight hub via TCP
 func SendCommand(cmd string, ip string) (string, error) {
-	//	log.Printf("Sending command %s to IP %s\n", cmd, ip)
-	conn, err := net.Dial("tcp", ip+":10003")
-	// TODO: Figure out timeout - not working like this...
-	//	raddr, err := net.ResolveTCPAddr("tcp", ip+":10003")
-	//	conn, err := net.DialTCP("tcp", nil, raddr)
-	//	conn.SetDeadline(time.Now().Add(100 * time.Millisecond))
+	success := make(chan string, 1)
+	response := ""
+	var err error
 
-	if err != nil {
-		log.Println("Failed to connect: %s", err)
-		return "", err
+	//	log.Printf("Sending command %s to IP %s\n", cmd, ip)
+	go func() {
+		conn, err := net.Dial("tcp", ip+":10003")
+
+		if err != nil {
+			log.Printf("Failed to connect: %s\n", err)
+			return
+		}
+		// send command to net connection, read it
+		fmt.Fprintf(conn, cmd)
+		response, err = bufio.NewReader(conn).ReadString('\n')
+		conn.Close()
+		success <- response
+	}()
+	select {
+	case <- success:
+		return response, err
+	case <- time.After(timeout):
+		return "", fmt.Errorf("Timed out sending TCP command %v to Yeelight hub at %v", cmd, ip)
 	}
-	// send command to net connection, read it
-	fmt.Fprintf(conn, cmd)
-	response, err := bufio.NewReader(conn).ReadString('\n')
-	//	conn.SetDeadline(time.Time{})
-	conn.Close()
 	return response, err
 }
 
@@ -146,24 +158,36 @@ func Heartbeat(ip string) error {
 // returns an empty string if not found
 // ref for UDP code: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
 func DiscoverHub() (string, error) {
-	// TODO: Add timeout and return error when not found after a while
+	success := make(chan string, 1)
 	searchString := "M-SEARCH * HTTP/1.1\r\n HOST:239.255.255.250:1900\r\n MAN:\"ssdp:discover\"\r\n ST:yeelink:yeebox\r\n MAC:00000001\r\n MX:3\r\n\n\r\n"
 	ip := ""
+	var err error
 	ssdp, _ := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
 	c, _ := net.ListenPacket("udp4", ":0")
 	socket := c.(*net.UDPConn)
 	message := []byte(searchString)
-	socket.WriteToUDP(message, ssdp)
-	answerBytes := make([]byte, 1024)
-	// stores result in answerBytes (pass-by-reference)
-	_, _, err := socket.ReadFromUDP(answerBytes)
-	if err == nil {
-		response := string(answerBytes)
-		// extract IP address from full response
-		startIndex := strings.Index(response, "LOCATION: ") + 10
-		endIndex := strings.Index(response, "MAC: ") - 2
-		ip = response[startIndex:endIndex]
+	go func() {
+		socket.WriteToUDP(message, ssdp)
+		answerBytes := make([]byte, 1024)
+		// stores result in answerBytes (pass-by-reference)
+		_, _, err = socket.ReadFromUDP(answerBytes)
+		if err == nil {
+			response := string(answerBytes)
+			// extract IP address from full response
+			startIndex := strings.Index(response, "LOCATION: ") + 10
+			endIndex := strings.Index(response, "MAC: ") - 2
+			ip = response[startIndex:endIndex]
+			success <- ip
+		}
+	}()
+
+	select {
+	case result := <-success:
+		return result, nil
+	case <-time.After(timeout):
+		return "", fmt.Errorf("Timed out searching for hub")
 	}
+
 	return ip, err
 }
 
