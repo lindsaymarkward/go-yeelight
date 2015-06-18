@@ -16,23 +16,18 @@ import (
 // timeout value for TCP and UDP commands
 const timeout = time.Second * 2
 
-type Hub struct {
-	IP       string
-	LightIDs []string // array of just the IDs of all lights the hub controls -- MAYBE? Maybe best in device, not here...
-}
 
+//A Light stores all of the data for a Yeelight, as returned by the GetLights ("GL") command
+//id = HEX code for light ID
+//type =  0 or 1 (always 1)
+//online = 0 or 1 (1 is online)
+//lqi = LED ZigBee signal, 0-100  *I think
+//r, g, b = 0-255...
+//level = 0-100 brightness
+//effect = reserved/not implemented by Yeelight yet
 type Light struct {
 	ID                                        string
 	Type, Online, LQI, R, G, B, Level, Effect int
-	/*
-	   id = HEX code for light ID
-	   type =  0 or 1 (always 1)
-	   online = 0 or 1 (1 is online)
-	   lqi = LED ZigBee signal, 0-100  *I think
-	   r, g, b = 0-255...
-	   level = 0-100 brightness
-	   effect = reserved/not implemented by Yeelight yet
-	*/
 }
 
 // GetLights queries the Yeelight hub for current status of all lights and
@@ -100,12 +95,11 @@ func SetOnOff(id string, state bool, ip string) error {
 	} else {
 		cmd = fmt.Sprintf("C %s,,,,0,\r\n", id)
 	}
-	//	fmt.Printf("%#v", cmd)
 	_, err := SendCommand(cmd, ip)
 	return err
 }
 
-// ToggleOnOff determines on/off state of chosen light (0 is off, anything > 0 is on)
+// ToggleOnOff determines on/off state of chosen light (level/brightness of 0 is off, anything > 0 is on)
 // then calls SetOnOff to set opposite on/off state
 func ToggleOnOff(id string, ip string) error {
 	lights, err := GetLights(ip)
@@ -134,15 +128,15 @@ func SetBrightness(id string, level float64, ip string) error {
 	return err
 }
 
-// SetColor takes r, g, b values (0-255) and sets the colour, leaving brightness unchanged
+// SetColor takes r, g, b values (0-255) and sets the color, leaving brightness unchanged
 func SetColor(id string, r, g, b uint8, ip string) error {
 	cmd := fmt.Sprintf("C %s,%d,%d,%d,,\r\n", id, r, g, b)
 	_, err := SendCommand(cmd, ip)
 	return err
 }
 
-// Heartbeat pings the Yeelight hub to see if it's alive, returns either nil error if it's responsive
-// or error if the ack is not received from the hub.
+// Heartbeat pings the Yeelight hub to see if it's alive,
+// returns either nil error if it's responsive or error if the ack is not received from the hub.
 func Heartbeat(ip string) error {
 	response, err := SendCommand("HB\r\n", ip)
 	if err != nil {
@@ -154,6 +148,7 @@ func Heartbeat(ip string) error {
 	return nil
 }
 
+// IsOn determines if a given light is on (has brightness/level above 0)
 func IsOn(id, ip string) (bool, error) {
 	lights, err := GetLights(ip)
 	for _, light := range lights {
@@ -165,12 +160,11 @@ func IsOn(id, ip string) (bool, error) {
 			}
 		}
 	}
-	// unknown light
 	return false, fmt.Errorf("Unknown light ID %v\n", id)
 }
 
 // DiscoverHub uses SSDP (UDP) to find and return the IP address of the Yeelight hub
-// returns an empty string if not found
+// returns an empty string and error if not found
 // ref for UDP code: https://groups.google.com/forum/#!topic/golang-nuts/Llfb0wMY9WI
 func DiscoverHub() (string, error) {
 	success := make(chan string, 1)
